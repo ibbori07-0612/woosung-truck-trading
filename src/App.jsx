@@ -7,6 +7,13 @@ import TruckFormModal from './components/TruckFormModal';
 import AuthPasswordModal from './components/AuthPasswordModal';
 import Footer from './components/Footer';
 import { PhoneCall, ShieldCheck, Truck, Sparkles } from 'lucide-react';
+import {
+  apiFetchTrucks,
+  apiFetchTruckDetail,
+  apiCreateTruck,
+  apiUpdateTruck,
+  apiDeleteTruck
+} from './lib/api';
 
 const ADMIN_MASTER_KEY = 'woosung8949';
 
@@ -42,28 +49,12 @@ export default function App() {
     }, 4000);
   };
 
-  // Fetch Trucks from API
+  // Fetch Trucks from API / Local Storage
   const fetchTrucks = useCallback(async () => {
     setLoading(true);
     try {
-      const queryParams = new URLSearchParams({
-        search: filters.search,
-        registration_type: filters.registration_type,
-        category: filters.category,
-        manufacturer: filters.manufacturer,
-        year: filters.year,
-        month: filters.month,
-        location: filters.location,
-        sort: sort
-      });
-
-      const response = await fetch(`/api/trucks?${queryParams.toString()}`);
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          setTrucks(result.data || []);
-        }
-      }
+      const data = await apiFetchTrucks(filters, sort);
+      setTrucks(data || []);
     } catch (err) {
       console.error('Failed to fetch trucks:', err);
     } finally {
@@ -78,15 +69,11 @@ export default function App() {
   // Open detail modal & auto increment views
   const handleSelectTruck = async (truck) => {
     try {
-      const res = await fetch(`/api/trucks/${truck.id}`);
-      if (res.ok) {
-        const result = await res.json();
-        if (result.success && result.data) {
-          setSelectedTruck(result.data);
-          // Refresh list to update views count in background
-          fetchTrucks();
-          return;
-        }
+      const detail = await apiFetchTruckDetail(truck.id);
+      if (detail) {
+        setSelectedTruck(detail);
+        fetchTrucks();
+        return;
       }
     } catch (e) {
       console.error('Detail fetch error:', e);
@@ -115,30 +102,15 @@ export default function App() {
   const handleFormSubmit = async (payload) => {
     if (editingTruck) {
       // Update Post
-      const response = await fetch(`/api/trucks/${editingTruck.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...payload,
-          auth_password: payload.password || ADMIN_MASTER_KEY
-        })
-      });
-      const result = await response.json();
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || '수정 처리 중 오류가 발생했습니다.');
-      }
+      await apiUpdateTruck(
+        editingTruck.id,
+        payload,
+        payload.password || ADMIN_MASTER_KEY
+      );
       showNotification('게시물이 성공적으로 수정되었습니다.');
     } else {
       // Create Post
-      const response = await fetch('/api/trucks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || '등록 처리 중 오류가 발생했습니다.');
-      }
+      await apiCreateTruck(payload);
       showNotification('신규 특장차 매물이 성공적으로 등록되었습니다.');
     }
 
@@ -171,17 +143,8 @@ export default function App() {
       setAuthModalConfig(null);
       setSelectedTruck(null);
     } else if (actionType === 'delete') {
-      // Delete Post via API
-      const res = await fetch(`/api/trucks/${truck.id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ auth_password: enteredPassword })
-      });
-      const result = await res.json();
-      if (!res.ok || !result.success) {
-        throw new Error(result.message || '삭제에 실패했습니다. 비밀번호를 확인해주세요.');
-      }
-
+      // Delete Post via API / Local Storage
+      await apiDeleteTruck(truck.id, enteredPassword, ADMIN_MASTER_KEY);
       showNotification('게시물이 성공적으로 삭제되었습니다.', 'success');
       setAuthModalConfig(null);
       setSelectedTruck(null);
